@@ -28,9 +28,26 @@ function setupSync(app) {
   const field = id => document.getElementById(id);
   const repo = field('syncRepo'), token = field('syncToken');
   const status = message => { field('syncStatus').textContent = message; };
-  const prefix = 'evening-life-sync:' + location.pathname + ':';
-  repo.value = localStorage.getItem(prefix + 'repo') || '';
-  token.value = sessionStorage.getItem(prefix + 'token') || '';
+  const legacyPrefix = 'evening-life-sync:' + location.pathname + ':';
+  const prefix = 'evening-life-sync:' + location.pathname.replace(/\/index\.html$/, '/') + ':';
+  const remember = field('syncRemember');
+  const tokenKey = prefix + 'token';
+  const priorRepo = localStorage.getItem(legacyPrefix + 'repo');
+  if (priorRepo && prefix !== legacyPrefix) {
+    for (const key of ['repo', priorRepo]) {
+      const value = localStorage.getItem(legacyPrefix + key);
+      if (value && !localStorage.getItem(prefix + key)) localStorage.setItem(prefix + key, value);
+    }
+  }
+  repo.value = localStorage.getItem(prefix + 'repo') || 'Adson321/evening-life-data';
+  const savedToken = localStorage.getItem(tokenKey);
+  remember.checked = Boolean(savedToken);
+  token.value = savedToken || sessionStorage.getItem(tokenKey) || sessionStorage.getItem(legacyPrefix + 'token') || '';
+  function forgetToken() {
+    localStorage.removeItem(tokenKey);
+    sessionStorage.removeItem(tokenKey);
+    sessionStorage.removeItem(legacyPrefix + 'token');
+  }
   let busy = false, timer;
   let connected = Boolean(token.value && repo.value);
   status(connected ? '等待同步' : '当前仅保存在本机');
@@ -46,7 +63,7 @@ function setupSync(app) {
       return;
     }
     busy = true;
-    for (const id of ['syncNow','syncOff','syncRepo','syncToken']) field(id).disabled = true;
+    for (const id of ['syncNow','syncOff','syncRepo','syncToken','syncRemember']) field(id).disabled = true;
     status('正在同步…');
     const api = 'https://api.github.com/repos/' + target;
     const headers = {Authorization: 'Bearer ' + secret, Accept: 'application/vnd.github+json'};
@@ -90,7 +107,8 @@ function setupSync(app) {
       if (!equal(next, latest)) app.apply(next);
       localStorage.setItem(key, JSON.stringify(merged));
       localStorage.setItem(prefix + 'repo', target);
-      sessionStorage.setItem(prefix + 'token', secret);
+      forgetToken();
+      (remember.checked ? localStorage : sessionStorage).setItem(tokenKey, secret);
       connected = true;
       status('已同步 · ' + new Date().toLocaleTimeString());
       if (!equal(latest, local)) schedule();
@@ -98,14 +116,21 @@ function setupSync(app) {
       status('同步未完成 · ' + err.message);
     } finally {
       busy = false;
-      for (const id of ['syncNow','syncOff','syncRepo','syncToken']) field(id).disabled = false;
+      for (const id of ['syncNow','syncOff','syncRepo','syncToken','syncRemember']) field(id).disabled = false;
     }
   }
-  repo.oninput = token.oninput = () => { connected = false; sessionStorage.removeItem(prefix + 'token'); };
+  repo.oninput = token.oninput = () => { connected = false; forgetToken(); };
+  remember.onchange = () => {
+    if (!remember.checked) {
+      forgetToken();
+      if (connected) sessionStorage.setItem(tokenKey, token.value.trim());
+    }
+  };
   field('syncNow').onclick = () => run(true);
   field('syncOff').onclick = () => {
     connected = false;
-    sessionStorage.removeItem(prefix + 'token');
+    forgetToken();
+    remember.checked = false;
     token.value = '';
     status('已断开，记录保存在本机');
   };

@@ -1,4 +1,4 @@
-const cacheName = 'evening-life-assistant-' + self.registration.scope + '-v2';
+const cacheName = 'evening-life-assistant-' + self.registration.scope + '-v3';
 const assets = ['./', './index.html', './sync.js', './manifest.webmanifest', './icon.png'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(cacheName).then(cache => cache.addAll(assets)));
